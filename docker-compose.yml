@@ -1,0 +1,112 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: germed_chatbot_api
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - MONGO_URI=mongodb://mongodb:27017
+      - TEXT_REDIS_HOST=redis_textbot
+      - IMAGE_REDIS_HOST=redis_imagebot
+      - RATE_LIMIT_REDIS_HOST=redis_ratelimit
+      - TOKEN_REDIS_HOST=redis_tokenmanager
+      # Ensure other keys like OPENAI_API_KEY are passed via .env file or overridden here if needed
+    env_file:
+      - .env
+    depends_on:
+      - mongodb
+      - redis_textbot
+      - redis_imagebot
+      - redis_ratelimit
+      - redis_tokenmanager
+    volumes:
+      - ./src:/app/src # Mount src for live reload during dev if needed (requires correct reloading config)
+
+  mongodb:
+    image: mongo:latest
+    container_name: germed_mongodb
+    restart: always
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: examplepassword
+    volumes:
+      - mongodb_data:/data/db
+
+  mongo-express:
+    image: mongo-express:latest
+    container_name: germed_mongo_express
+    restart: always
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: root
+      ME_CONFIG_MONGODB_ADMINPASSWORD: examplepassword
+      ME_CONFIG_MONGODB_URL: mongodb://root:examplepassword@mongodb:27017/
+    depends_on:
+      - mongodb
+
+  redis_textbot:
+    image: redis/redis-stack-server:latest
+    container_name: dev-germed-text-redis
+    restart: always
+    ports:
+      - "6394:6379"
+    command: redis-server --requirepass Gtechsources6047079
+    volumes:
+      - redis_text_data:/data
+
+  redis_imagebot:
+    image: redis/redis-stack-server:latest
+    container_name: dev-germed-vision-redis
+    restart: always
+    ports:
+      - "6395:6379"
+    command: redis-server --requirepass Gtechsources6047079
+    volumes:
+      - redis_image_data:/data
+
+  redis_ratelimit:
+    image: redis/redis-stack-server:latest
+    container_name: dev-germed-rate-redis
+    restart: always
+    ports:
+      - "6396:6379"
+    command: redis-server --requirepass Gtechsources6047079
+    volumes:
+      - redis_rate_data:/data
+
+  redis_tokenmanager:
+    image: redis/redis-stack-server:latest
+    container_name: dev-germed-token-redis
+    restart: always
+    ports:
+      - "6397:6379"
+    command: redis-server --requirepass Gtechsources6047079
+    volumes:
+      - redis_token_data:/data
+
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: germed_redis_commander
+    restart: always
+    environment:
+      - REDIS_HOSTS=Text:redis_textbot:6379,Image:redis_imagebot:6379,Rate:redis_ratelimit:6379,Token:redis_tokenmanager:6379
+    ports:
+      - "8082:8081"
+    depends_on:
+      - redis_textbot
+      - redis_imagebot
+      - redis_ratelimit
+      - redis_tokenmanager
+
+volumes:
+  mongodb_data:
+  redis_text_data:
+  redis_image_data:
+  redis_rate_data:
+  redis_token_data:
