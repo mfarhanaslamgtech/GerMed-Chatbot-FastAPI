@@ -35,7 +35,8 @@ services:
     restart: always
     ports:
       - "6394:6379"
-    command: redis-server --requirepass Gtechsources6047079
+    environment:
+      - REDIS_ARGS=--requirepass Gtechsources6047079
     volumes:
       - redis_text_data:/data
 
@@ -46,7 +47,8 @@ services:
     restart: always
     ports:
       - "6395:6379"
-    command: redis-server --requirepass Gtechsources6047079
+    environment:
+      - REDIS_ARGS=--requirepass Gtechsources6047079
     volumes:
       - redis_image_data:/data
 
@@ -57,7 +59,8 @@ services:
     restart: always
     ports:
       - "6396:6379"
-    command: redis-server --requirepass Gtechsources6047079
+    environment:
+      - REDIS_ARGS=--requirepass Gtechsources6047079
     volumes:
       - redis_rate_data:/data
 
@@ -68,7 +71,8 @@ services:
     restart: always
     ports:
       - "6397:6379"
-    command: redis-server --requirepass Gtechsources6047079
+    environment:
+      - REDIS_ARGS=--requirepass Gtechsources6047079
     volumes:
       - redis_token_data:/data
 
@@ -78,7 +82,7 @@ services:
     container_name: germed_redis_commander
     restart: always
     environment:
-      - REDIS_HOSTS=Text:redis_textbot:6379,Image:redis_imagebot:6379,Rate:redis_ratelimit:6379,Token:redis_tokenmanager:6379
+      - REDIS_HOSTS=Text:redis_textbot:6379:0:Gtechsources6047079,Image:redis_imagebot:6379:0:Gtechsources6047079,Rate:redis_ratelimit:6379:0:Gtechsources6047079,Token:redis_tokenmanager:6379:0:Gtechsources6047079
     ports:
       - "8082:8081"
     depends_on:
