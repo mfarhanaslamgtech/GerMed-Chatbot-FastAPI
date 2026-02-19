@@ -40,6 +40,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv, find_dotenv
 import logging
+import asyncio
 
 from src.app.config.config import Config
 from src.app.config.settings import settings
@@ -69,6 +70,7 @@ async def lifespan(app: FastAPI):
     Shutdown: Close connections, stop schedulers, cleanup resources
     """
     logger = logging.getLogger(__name__)
+    background_tasks = set()
     
     # ═══════ STARTUP ═══════
     logger.info("🚀 GerMed ChatBot starting up...")
@@ -113,15 +115,18 @@ async def lifespan(app: FastAPI):
         await container.user_repository().ensure_unique_email_index()
 
         # 4. Background Catalog Sync (Layer 9)
-        import asyncio
         try:
             catalog_service = container.catalog_service()
-            asyncio.create_task(catalog_service.fetch_catalogs_and_products())
+            catalog_task = asyncio.create_task(catalog_service.fetch_catalogs_and_products())
+            background_tasks.add(catalog_task)
+            catalog_task.add_done_callback(background_tasks.discard)
             logger.info("📦 Catalog sync started in background.")
             
             # Embeddings Sync (Layer 9 - Background Task)
             sync_manager = container.embeddings_sync_manager()
-            asyncio.create_task(sync_manager.run_sync_task())
+            sync_task = asyncio.create_task(sync_manager.run_sync_task())
+            background_tasks.add(sync_task)
+            sync_task.add_done_callback(background_tasks.discard)
             logger.info("🧠 Embeddings sync started in background.")
         except Exception as e:
             logger.warning(f"⚠️ Initial sync tasks skipped: {e}")
@@ -138,6 +143,19 @@ async def lifespan(app: FastAPI):
     # ═════ SHUTDOWN ═════
     logger.info("🛑 GerMed ChatBot shutting down...")
     
+    # 🏁 Cancel background tasks
+    if background_tasks:
+        logger.info(f"⏳ Cancelling {len(background_tasks)} background tasks...")
+        for task in background_tasks:
+            task.cancel()
+        
+        # Wait for all tasks to finish cancelling (with a timeout)
+        try:
+            await asyncio.wait_for(asyncio.gather(*background_tasks, return_exceptions=True), timeout=5.0)
+            logger.info("✅ All background tasks cancelled.")
+        except asyncio.TimeoutError:
+            logger.warning("⚠️ Some background tasks failed to cancel gracefully within 5s.")
+
     # 📝 Cleanup Resources
     try:
         container = app.container

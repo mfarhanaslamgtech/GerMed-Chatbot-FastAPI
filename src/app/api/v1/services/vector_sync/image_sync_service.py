@@ -138,6 +138,16 @@ class ImageSyncService:
                     "large": img.get("large", ""),
                 })
 
+            # 1.5 Videos
+            videos = (product.get("videos") or {}).get("video", [])
+            if isinstance(videos, dict):
+                videos = [videos]
+            for v in videos:
+                prod_videos.append({
+                    "video_url": v.get("video_url", ""),
+                    "video_source": v.get("video_source", ""),
+                })
+
             # 2. Sub products
             subs = (product.get("sub_products") or {}).get("sub_product", [])
             if isinstance(subs, dict): subs = [subs]
@@ -165,7 +175,9 @@ class ImageSyncService:
                 "sub_products": sub_list,
                 "categories": cat_list,
                 "pdf_url": product.get("pdf_link", ""),
-                "item_keywords": product.get("name", "")
+                "video_url": prod_videos,
+                "item_keywords": product.get("name", ""),
+                "meta_description": product.get("name", "")
             }
             rows.append(row)
         
@@ -188,7 +200,8 @@ class ImageSyncService:
             "id": str(item.get("primary_key", "")),
             "name": str(item.get("product_name", "")),
             "image": str(item.get("image_url", "")),
-            "url": str(item.get("product_url", ""))
+            "url": str(item.get("product_url", "")),
+            "video": str(item.get("video_url", ""))
         }
         encoded = json.dumps(hash_payload, sort_keys=True).encode('utf-8')
         return hashlib.md5(encoded).hexdigest()
@@ -211,8 +224,10 @@ class ImageSyncService:
                     TextField("product_url"),
                     TextField("image_url"),
                     TextField("pdf_url"),
+                    TextField("video_url"),
                     TextField("short_description"),
                     TextField("full_description"),
+                    TextField("meta_description"),
                     TextField("sub_products"),
                     TextField("categories"),
                     TextField("sku"),
@@ -298,8 +313,10 @@ class ImageSyncService:
             "product_url": str(item.get("product_url", "")),
             "image_url": str(item.get("_clean_image_url", "")),
             "pdf_url": str(item.get("pdf_url", "")),
+            "video_url": json.dumps(item.get("video_url", [])),
             "short_description": str(item.get("short_description", "")),
             "full_description": str(item.get("full_description", "")),
+            "meta_description": str(item.get("meta_description", "")),
             "sub_products": json.dumps(item.get("sub_products", [])),
             "categories": json.dumps(item.get("categories", [])),
             "sku": str(item.get("sku", "")),

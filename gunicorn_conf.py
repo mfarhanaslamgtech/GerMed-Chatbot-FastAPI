@@ -34,6 +34,7 @@ workers = 4
 # AI models can take time to load or process complex queries.
 # Increase timeout to prevent Gunicorn from killing workers prematurely.
 timeout = 120  # 2 minutes
+graceful_timeout = 10  # 10 seconds for graceful shutdown
 keepalive = 5
 
 # 5. Logging

@@ -56,3 +56,28 @@ class LocalAssetUploader:
         file_url = urljoin(base_url, unique_filename)
         
         return file_url
+
+    async def upload_bytes(self, content: bytes, filename: str = "upload.jpg") -> str:
+        """
+        Uploads raw image bytes asynchronously and returns its access URL.
+        """
+        if not content:
+            raise ValueError("No content provided for upload")
+            
+        file_extension = os.path.splitext(filename)[1]
+        unique_filename = f"{uuid.uuid4().hex}{file_extension}"
+        file_path = os.path.join(self.base_upload_dir, unique_filename)
+        
+        try:
+            with open(file_path, "wb") as f:
+                f.write(content)
+            
+            logging.info(f"✅ Bytes uploaded: {unique_filename} ({len(content)} bytes)")
+        except Exception as e:
+            logging.error(f"❌ Failed to save file from bytes: {str(e)}")
+            raise OSError(f"Failed to save file: {str(e)}")
+            
+        base_url = self.base_url if self.base_url.endswith('/') else self.base_url + '/'
+        file_url = urljoin(base_url, unique_filename)
+        
+        return file_url

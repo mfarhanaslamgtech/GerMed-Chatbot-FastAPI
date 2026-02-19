@@ -153,6 +153,16 @@ class TextSyncService:
             for sp in subs:
                 sub_list.append({"name": sp.get("name"), "sku": sp.get("sku")})
 
+            # Videos
+            prod_videos = []
+            videos = (product.get("videos") or {}).get("video", [])
+            if isinstance(videos, dict): videos = [videos]
+            for v in videos:
+                prod_videos.append({
+                    "video_url": v.get("video_url", ""),
+                    "video_source": v.get("video_source", ""),
+                })
+
             row = {
                 "primary_key": product.get("id", ""),
                 "product_name": product.get("name", ""),
@@ -160,9 +170,13 @@ class TextSyncService:
                 "product_url": product.get("url", ""),
                 "product_image": prod_images[0] if prod_images else "",
                 "pdf_link": product.get("pdf_link", ""),
+                "video_url": prod_videos,
+                "short_description": product.get("short_description", ""),
+                "full_description": product.get("full_description", ""),
                 "sub_products": sub_list,
                 "categories": cat_urls,
-                "category_names": cat_names
+                "category_names": cat_names,
+                "sku": product.get("sku") or product.get("id", "")
             }
             rows.append(row)
         return pd.DataFrame(rows)
@@ -180,7 +194,10 @@ class TextSyncService:
         relevant = {
             "keywords": item.get("item_keywords", ""),
             "cats": item.get("category_names", []),
-            "name": item.get("product_name", "")
+            "name": item.get("product_name", ""),
+            "sku": item.get("sku", ""),
+            "desc": item.get("short_description", ""),
+            "videos": item.get("video_url", [])
         }
         return hashlib.md5(json.dumps(relevant, sort_keys=True).encode()).hexdigest()
 
@@ -202,6 +219,10 @@ class TextSyncService:
                 TagField("pdf_link"),
                 TagField("sub_products"),
                 TagField("categories"),
+                TagField("sku"),
+                TextField("short_description"),
+                TextField("full_description"),
+                TextField("video_url"),
                 TagField("content_hash"),
             ])
 

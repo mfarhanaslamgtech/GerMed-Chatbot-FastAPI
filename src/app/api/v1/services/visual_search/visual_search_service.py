@@ -23,6 +23,7 @@ import json
 import re
 import ast
 import httpx
+import openai
 from io import BytesIO, IOBase
 from PIL import Image
 from typing import Union, List, Dict, Any, Optional, IO
@@ -70,6 +71,7 @@ class VisualSearchService:
         self.repository = repository
         self.openai_client = openai_client
         self.IMAGE_EMBEDDING_FIELD = "image_vector"
+        self.INDEX_NAME = "idx_images"
         self.SIMILARITY_THRESHOLD = 0.2
         self.TOP_K = 20
         self.CATALOG_REDIS_KEY = "gervet:catalogs"
@@ -102,8 +104,11 @@ class VisualSearchService:
             # ───────────────────────────────────────────
             if image_input:
                 loaded_image = await self._load_image(image_input)
+                
+                # Robust UploadFile check
+                is_upload_file = isinstance(image_input, UploadFile) or type(image_input).__name__ == "UploadFile" or (hasattr(image_input, "read") and hasattr(image_input, "file"))
 
-                if isinstance(image_input, UploadFile):
+                if is_upload_file:
                     image_url = await self.asset_uploader.upload(image_input)
                 else:
                     image_url = await self.asset_uploader.upload_bytes(
@@ -239,8 +244,14 @@ class VisualSearchService:
 
             return response_content
 
+        except openai.APIConnectionError as e:
+            logger.error(f"OpenAI API connection failed: {str(e)}")
+            return '{"error": "Connection failed. Please try again."}'
+        except openai.RateLimitError as e:
+            logger.error(f"OpenAI API rate limit exceeded: {str(e)}")
+            return '{"error": "Rate limit exceeded. Please try again later."}'
         except Exception as e:
-            logger.error(f"OpenAI Vision API error: {str(e)}", exc_info=True)
+            logger.error(f"Unexpected error in OpenAI API call: {str(e)}", exc_info=True)
             return '{"error": "Unable to analyze image. Please try again."}'
 
     # ═══════════════════════════════════════════════════════════
@@ -249,7 +260,7 @@ class VisualSearchService:
 
     async def _download_image_from_url(self, image_url: str) -> BytesIO:
         """Download image asynchronously using httpx."""
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.get(image_url)
             response.raise_for_status()
             return BytesIO(response.content)
@@ -264,7 +275,7 @@ class VisualSearchService:
         """
         if isinstance(image_input, Image.Image):
             return image_input
-        elif isinstance(image_input, UploadFile):
+        elif isinstance(image_input, UploadFile) or type(image_input).__name__ == "UploadFile" or (hasattr(image_input, "read") and hasattr(image_input, "seek") and hasattr(image_input, "file")):
             await image_input.seek(0)
             content = await image_input.read()
             await image_input.seek(0)  # Reset for potential re-use
@@ -289,9 +300,19 @@ class VisualSearchService:
             inputs = {k: v.to(self.device) for k, v in inputs.items()}
 
             with torch.no_grad():
-                embedding = self.model.get_image_features(**inputs)
+                outputs = self.model.get_image_features(**inputs)
+            
+            # Handle cases where output might be a dict-like object (BaseModelOutputWithPooling)
+            if hasattr(outputs, "image_embeds"):
+                features_tensor = outputs.image_embeds
+            elif hasattr(outputs, "pooler_output"):
+                features_tensor = outputs.pooler_output
+            elif isinstance(outputs, dict):
+                features_tensor = outputs.get("image_embeds") or outputs.get("pooler_output") or outputs
+            else:
+                features_tensor = outputs
 
-            features = embedding.cpu().numpy().astype(np.float32).flatten()
+            features = features_tensor.cpu().numpy().astype(np.float32).flatten()
 
             # L2 Normalization
             norm = np.linalg.norm(features)
@@ -354,16 +375,14 @@ class VisualSearchService:
          .return_fields(
              "vector_distance", "product_name", "product_url", "image_url",
              "video_url", "pdf_url", "item_keywords", "sub_products",
-             "categories", "short_description", "full_description", "sku"
+             "categories", "short_description", "full_description", "sku",
+             "meta_description"
          ) \
          .dialect(2)
 
         try:
-            # Redis sync client → run in threadpool
-            results = await run_in_threadpool(
-                self.redis.ft().search, query,
-                {"vec_param": query_vector}
-            )
+            # Redis async search
+            results = await self.redis.ft(self.INDEX_NAME).search(query, {"vec_param": query_vector})
             logger.info(f"[Visual Search] Found {len(results.docs)} results from Redis KNN")
 
             similar_products = []
@@ -409,6 +428,7 @@ class VisualSearchService:
                     "product_variations": sub_products,
                     "categories": categories,
                     "sku": getattr(doc, "sku", None),
+                    "meta_description": getattr(doc, "meta_description", None),
                     "similarity_score": round(similarity, 4)
                 })
 
@@ -632,12 +652,26 @@ class VisualSearchService:
         {{
             "start_message": "...",
             "core_message": {{
-                "product": [{{ ... }}],
+                "product": [
+                    {{
+                        "name": "Product Name",
+                        "description": "Short description of the matching instrument",
+                        "url": "https://...",
+                        "image_url": "https://...",
+                        "video_url": {{ "youtube": "...", "vimeo": "..." }},
+                        "pdf_url": "https://...",
+                        "sku": "...",
+                        "product_variations": [{{ ... }}]
+                    }},
+                    ... (Include all other relevant matches from the CONTEXT)
+                ],
                 "options": ["Yes", "No"]
             }},
             "end_message": "...",
             "more_prompt": "..."
         }}
+        
+        CRITICAL: If the image matches multiple items in the CONTEXT (e.g. different sizes or types of the same instrument category), include ALL of them in the "product" array to give the user complete options.
         """
 
         return qa_prompt_template.format(
