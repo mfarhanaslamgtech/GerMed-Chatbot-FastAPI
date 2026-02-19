@@ -1,4 +1,4 @@
-version: '3.8'
+
 
 services:
   # ── MongoDB: Core Database ──────────────────────────────────
@@ -7,7 +7,7 @@ services:
     container_name: germed_mongodb
     restart: always
     ports:
-      - "27017:27017"
+      - "27078:27017"
     environment:
       MONGO_INITDB_ROOT_USERNAME: root
       MONGO_INITDB_ROOT_PASSWORD: examplepassword

@@ -1,0 +1,119 @@
+
+
+services:
+  app:
+    build: .
+    container_name: germed_chatbot_api
+    restart: always
+    # Optimized for production: No simplistic port mapping if using Nginx
+    # But for now, we map it locally if needed, or rely on Nginx.
+    # In production with Nginx, we DO NOT expose 8000 directly to the internet.
+    expose:
+      - "8000"
+    environment:
+      # Pass specific vars that might differ or use interpolation
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
+      # All other env vars are loaded from .env file
+    env_file:
+      - .env
+    depends_on:
+      - mongodb
+      - redis_textbot
+      - redis_imagebot
+      - redis_ratelimit
+      - redis_tokenmanager
+    # Use the internal network for DB access
+    networks:
+      - germed_backend_network
+
+  nginx:
+    image: nginx:alpine
+    container_name: germed_nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./nginx/ssl:/etc/nginx/ssl
+      - ./uploads:/app/uploads # Serve static assets if needed
+    depends_on:
+      - app
+    networks:
+      - germed_backend_network
+
+  mongodb:
+    image: mongo:latest
+    container_name: germed_mongodb
+    restart: always
+    # Production Security: Do NOT map ports to host (unless 127.0.0.1 for tunnel)
+    expose:
+      - "27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - germed_backend_network
+
+  redis_textbot:
+    image: redis/redis-stack-server:latest
+    container_name: prod_germed_text_redis
+    restart: always
+    expose:
+      - "6379"
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_text_data:/data
+    networks:
+      - germed_backend_network
+
+  redis_imagebot:
+    image: redis/redis-stack-server:latest
+    container_name: prod_germed_vision_redis
+    restart: always
+    expose:
+      - "6379"
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_image_data:/data
+    networks:
+      - germed_backend_network
+
+  redis_ratelimit:
+    image: redis/redis-stack-server:latest
+    container_name: prod_germed_rate_redis
+    restart: always
+    expose:
+      - "6379"
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_rate_data:/data
+    networks:
+      - germed_backend_network
+
+  redis_tokenmanager:
+    image: redis/redis-stack-server:latest
+    container_name: prod_germed_token_redis
+    restart: always
+    expose:
+      - "6379"
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_token_data:/data
+    networks:
+      - germed_backend_network
+
+# Define a private network for backend communication
+networks:
+  germed_backend_network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+  redis_text_data:
+  redis_image_data:
+  redis_rate_data:
+  redis_token_data:

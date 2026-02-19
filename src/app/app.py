@@ -42,9 +42,9 @@ from dotenv import load_dotenv, find_dotenv
 import logging
 
 from src.app.config.config import Config
+from src.app.config.settings import settings
 from src.app.utils.logger import setup_logging
 from src.app.core.redis_connector import RedisConnection
-from src.app.extensions.database import Database
 from src.app.middlewares.auth_middleware import AuthMiddleware
 
 
@@ -75,12 +75,18 @@ async def lifespan(app: FastAPI):
     
     # 📝 Infrastructure Startup (Layer 2 & 3)
     try:
-        # 1. Initialize MongoDB
-        Database() 
-        logger.info("✅ MongoDB Connection initialized.")
-
-        # 2. Get DI Container
+        # 1. Initialize MongoDB (via DI Container — Singleton)
         container = app.container
+        db = container.database()
+        # Verify connection with a ping (catches auth failures early)
+        try:
+            await db.client.admin.command('ping')
+            logger.info("✅ MongoDB Connection initialized and verified.")
+        except Exception as mongo_err:
+            logger.error(f"❌ MongoDB ping failed: {mongo_err}")
+            from src.app.config.settings import settings
+            logger.error(f"   MONGO_URI: {settings.mongodb.MONGO_URI}")
+            raise
 
         # 3. Initialize & Verify All Redis Connections (FAST)
         # 🎓 We do this early so the logs show connectivity immediately.
@@ -197,16 +203,16 @@ def create_app() -> FastAPI:
 
     # ── CORS Middleware ─────────────────────────────────────────
     #
-    # 🎓 Flask version:  CORS(app, resources={r"/*": {"origins": "*"}})
-    #    FastAPI version: app.add_middleware(CORSMiddleware, ...)
-    #
-    #    Both do the same thing — allow cross-origin requests from
-    #    the frontend. The middleware approach in FastAPI is more
-    #    explicit about what's happening.
+    # 🎓 Production Security:
+    #    We parse the ALLOWED_ORIGINS string into a list.
+    #    If wildcard "*" is present, we allow all (DEV mode).
+    #    Otherwise, we strictly allow only the listed domains.
+
+    origins_list = [origin.strip() for origin in settings.general.ALLOWED_ORIGINS.split(",")]
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],           # In production, restrict this!
+        allow_origins=origins_list,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

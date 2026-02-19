@@ -1,85 +1,112 @@
-# GerMed ChatBot (FastAPI Migration)
+# GerMed ChatBot (FastAPI Production Ready)
 
-This project has been migrated from Flask to FastAPI for improved performance, async support, and modern features.
+This is a high-performance, asynchronous AI ChatBot built with **FastAPI**, designed for scalability and production use. It supports text and image queries using RAG (Retrieval-Augmented Generation) with OpenAI, Pinecone, and MongoDB.
 
-## 🚀 Key Features
-- **FastAPI**: Modern, fast (high-performance) web framework.
-- **Asynchronous**: Built-in async/await support for I/O operations.
-- **Dependency Injection**: Modular and testable architecture using `dependency-injector`.
-- **Auto-Documentation**: interactive API docs at `/docs` (Swagger UI) and `/redoc`.
-- **Dockerized**: Easy setup with Docker Compose.
+---
 
-## 🛠️ Setup & Installation
+## 🚀 Quick Start (Choose Your Path)
 
-### Prerequisites
-- Python 3.12+
-- Docker & Docker Compose (optional but recommended)
+### Path A: I am a Developer (Local Coding)
+*Use this if you want to write code and see changes instantly.*
 
-### Local Setup (Without Docker)
-1. **Create Virtual Environment**:
-   ```bash
-   python3 -m venv .venv
-   source .venv/bin/activate
-   ```
-2. **Install Dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. **Configure Environment**:
-   - Copy `.env.example` to `.env` (a `.env` with dummy values is created for you)
-   - Update `.env` with real API keys (OpenAI, Pinecone, etc.)
-4. **Run the Application**:
-   ```bash
-   uvicorn src.app.app:create_app --host 0.0.0.0 --port 8000 --reload
-   ```
+1.  **Prerequisites**: Python 3.12+, Docker Desktop (for databases).
+2.  **Environment Setup**:
+    ```bash
+    # 1. Create a virtual environment
+    python -m venv .venv
+    
+    # 2. Activate it (Windows)
+    .venv\Scripts\activate
+    
+    # 3. Install dependencies
+    pip install -r requirements.txt
+    ```
+3.  **Start Databases (Docker)**:
+    You need MongoDB and Redis running. We have a dedicated compose file for this:
+    ```bash
+    docker-compose -f docker-compose.db.yml up -d
+    ```
+4.  **Configure .env**:
+    Copy `.env.example` to `.env` and set `DEBUG=True`.
+5.  **Run the App (Hot Reload)**:
+    ```bash
+    uvicorn src.app.app:create_app --host 0.0.0.0 --port 8000 --reload
+    ```
+    *   **API Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
+    *   **Mongo Express**: [http://localhost:8081](http://localhost:8081)
+    *   **Redis Commander**: [http://localhost:8082](http://localhost:8082)
 
-### 🐳 Docker Scenarios
+---
 
-Choose the scenario that fits your current task:
+### Path B: Production Deployment
+*Use this for deploying to a live server (AWS, DigitalOcean, etc.).*
 
-#### Scenario A: Databases Only (Fastest for Local Coding)
-Use this if you want to run the FastAPI app locally (`uvicorn`) but need the databases (Redis Stack, MongoDB) running in Docker.
-1. **Start Databases**:
-   ```bash
-   docker-compose -f docker-compose.db.yml up -d
-   ```
-2. **Run App Locally**:
-   ```bash
-   uvicorn main:app --reload
-   ```
+**Key Features of Production Mode:**
+*   🔒 **Secure**: Internally restricted database ports (not exposed to internet).
+*   🚀 **Scalable**: Uses **Gunicorn** with 4 concurrent workers (configurable).
+*   🌐 **Nginx Proxy**: Handles SSL/TLS and static assets.
+*   👤 **Non-Root User**: Runs inside container as secure `appuser`.
 
-#### Scenario B: Full Stack (App + Databases)
-Use this to test the entire system as a production-like containerized environment.
-1. **Build and Run**:
-   ```bash
-   docker-compose up --build -d
-   ```
+#### 1. Security First
+*   **Update Passwords**: Open `.env` and `docker-compose.production.yml`. Replace ALL placeholder passwords (`CHANGE_ME_...`) with strong, random strings.
+*   **Disable Debug**: Ensure `DEBUG=False` in `.env`.
+*   **Allowed Origins**: Set `ALLOWED_ORIGINS` in `.env` to your frontend domain (e.g., `https://my-app.com`).
 
-### 🖥️ Admin Dashboards (After starting Docker)
-- **MongoDB UI**: [http://localhost:8081](http://localhost:8081)
-- **Redis UI**: [http://localhost:8082](http://localhost:8082)
-- **API Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
+#### 2. Deploy
+Run the full production stack:
+```bash
+docker-compose -f docker-compose.production.yml up --build -d
+```
 
-## 🧪 Running Tests
-To run all unit and integration tests:
+#### 3. Verify Deployment
+*   The API is now hidden behind Nginx at **Port 80/443**.
+*   Direct access to port `8000` is **BLOCKED**.
+*   Direct access to Redis/Mongo ports (`6379`, `27017`) is **BLOCKED**.
+*   **Health Check**: `curl http://localhost/health`
+
+---
+
+## 🛠️ Configuration Guide
+
+### 1. `.env` File (Environment Variables)
+This application uses Pydantic Settings for validation. Missing variables will prevent startup.
+
+| Variable | Description | Example (Dev) | Production |
+| :--- | :--- | :--- | :--- |
+| `DEBUG` | Shows stack traces on error | `True` | `False` |
+| `ALLOWED_ORIGINS` | CORS allowed domains | `*` | `https://domain.com` |
+| `OPENAI_API_KEY` | Your OpenAI Key | `sk-...` | `sk-...` |
+| `REDIS_PASSWORD` | Secure password for all Redis instances | `admin` | `StrongPass123!` |
+| `JWT_SECRET_KEY` | key for signing tokens | `secret` | `LongRandomString` |
+
+### 2. Gunicorn Configuration (`gunicorn_conf.py`)
+Controls the application server workers.
+*   **Workers**: Default is `4`.
+*   **Memory Usage**: Each worker loads the AI models (~1.5GB RAM).
+*   **Scaling**: To handle more traffic, increase workers (requires more RAM) or move AI models to a separate service.
+
+---
+
+## 📂 Project Structure
+```
+GerMed-Chatbot-FastAPI/
+├── src/
+│   └── app/
+│       ├── api/             # Routes (Controllers)
+│       ├── core/            # Database & Redis Connections
+│       ├── services/        # Business Logic
+│       ├── repositories/    # Database Access Layer
+│       └── containers/      # Dependency Injection Setup
+├── docker-compose.yml       # Local Development Stack
+├── docker-compose.production.yml # Secure Production Stack
+├── docker-compose.db.yml    # Databases Only (for local coding)
+├── gunicorn_conf.py         # Production Server Config
+├── nginx/                   # Nginx Proxy Config
+└── Dockerfile               # Multi-stage Production Build
+```
+
+## 🧪 Testing
+Run the test suite to ensure stability before deploying:
 ```bash
 ./run_tests.sh
 ```
-(Ensure you created the script or run `pytest` if configured, or use the loop command provided in development logs).
-
-## 📂 Project Structure
-- `src/app/api`: Routers, Controllers, Services, Repositories.
-- `src/app/core`: Core infrastructure (Redis, Logging).
-- `src/app/extensions`: Database connections.
-- `src/app/containers`: Dependency Injection Container.
-- `src/app/middlewares`: Authentication and others.
-- `tests/`: Unit and integration tests for all layers.
-
-## 🔑 Authentication
-- **Login**: `POST /v1/auth/login`
-- **Refresh**: `POST /v1/auth/refresh_token`
-- **Logout**: `POST /v1/auth/logout`
-Protected routes require `Authorization: Bearer <token>`.
-
-## 📦 Deployment
-The application is containerized. Use the provided `Dockerfile` and `docker-compose.yml` for deployment.

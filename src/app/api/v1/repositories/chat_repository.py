@@ -29,7 +29,7 @@ class ChatRepository:
             await self.collection.create_index([("content", "text")])
             logging.info("📝 Chat indexes ensured successfully.")
         except Exception as e:
-            logging.error(f"❌ Failed to create chat indexes: {e}")
+            logging.error(f"❌ Failed to create chat indexes: {type(e).__name__}: {e}")
 
     async def save_message(
         self, 

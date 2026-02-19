@@ -44,6 +44,7 @@ class GeneralSettings(BaseSettings):
     PORT: int = 8000                   # ← FastAPI convention is 8000, not 5000
     BASE_URL: str = "http://localhost:8000/v1/assets/public"
     BASE_UPLOAD_DIR: str = "./uploads"
+    ALLOWED_ORIGINS: str = "*"  # Comma-separated list of origins, e.g., "https://myapp.com,https://api.myapp.com"
     HF_TOKEN: Optional[str] = None
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
